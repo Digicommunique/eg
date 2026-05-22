@@ -434,9 +434,26 @@ async function handleMockRequest(urlStr: string, init?: RequestInit): Promise<Re
 if (typeof window !== 'undefined') {
   const originalFetch = window.fetch;
 
+  // Check if we are on a static host with NO backend server (like Vercel, Netlify, GitHub Pages)
+  const isStaticHosting = 
+    window.location.hostname.includes('vercel.app') ||
+    window.location.hostname.includes('netlify.app') ||
+    window.location.hostname.includes('github.io') ||
+    window.location.hostname.includes('surge.sh') ||
+    // If the hostname is not GCP Cloud Run (*.run.app) and not local development
+    (!window.location.hostname.includes('run.app') && 
+     !window.location.hostname.includes('localhost') && 
+     !window.location.hostname.includes('127.0.0.1') && 
+     !window.location.port);
+
   const customFetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : input.url);
     if (urlStr.includes('/api/')) {
+      // If on static hosting, bypass network entirely to avoid latency or HTML fallbacks (Index.html 404 overrides)
+      if (isStaticHosting) {
+        return await handleMockRequest(urlStr, init);
+      }
+
       try {
         const response = await originalFetch(input, init);
         const contentType = response.headers.get('content-type') || '';
